@@ -44,6 +44,10 @@ std::string gb_utf_conv(std::string& in, int fromCodePage, int toCodePage)
     // basically decode source string with specific code page, make it wchar_t
     // and then encode wchar_t with the code page we need, make it string again.
 
+    // empty string no needs conversion.
+    if (in.empty())
+        return in;
+    
     int len = MultiByteToWideChar(fromCodePage, 0, in.c_str(), -1, NULL, 0);
     std::wstring wstr(len + 1, '\0');
     MultiByteToWideChar(fromCodePage, 0, in.c_str(), -1, wstr.data(), len);
@@ -52,52 +56,46 @@ std::string gb_utf_conv(std::string& in, int fromCodePage, int toCodePage)
     std::string str(len + 1, '\0');
     WideCharToMultiByte(toCodePage, 0, wstr.c_str(), -1, str.data(), len, NULL, NULL);
 
+    // ini like map<string, string> may not store '\0'
+    // as we will "oss << gb_utf_conv(pair.first, ...) << '=' << ..."
+    // the stream appending may got '\0' into buffer. 
+    if (auto nil = str.find('\0'))
+        str.resize(nil);
     return str;
 }
 #endif
 
 bool IsTextUTF8(const std::string& str)
 {
-    char nBytes = 0;
-    unsigned char chr;
-    bool bAllAscii = true;
+    // a better version, see https://www.tutorialspoint.com/utf-8-validation-in-cplusplus.
+    if (str.empty())
+        return false;
+
+    int cnt = 0;
+    // Since FA2sp is Windows Native with GBK default code page,
+    // I'd consider to shorten the validating process, and avoid extra (utf8)ASCII -> (gbk)ASCII stuff.
+    bool isASCII = true;
 
     for (int i = 0; i < str.length(); i++)
     {
-        chr = str[i];
+        int chr = str[i];
 
-        if (bAllAscii && (chr & 0x80) != 0)
-            bAllAscii = false;
+        if ((chr & 0x80) == 0)
+            continue;
+        isASCII = false;
 
-        if (nBytes == 0)
+        if (!cnt)
         {
-            if (chr >= 0x80)
-            {
-                if (chr >= 0xFC && chr <= 0xFD)   nBytes = 6;
-                else if (chr >= 0xF8)         nBytes = 5;
-                else if (chr >= 0xF0)         nBytes = 4;
-                else if (chr >= 0xE0)         nBytes = 3;
-                else if (chr >= 0xC0)         nBytes = 2;
-                else {
-                    return false;
-                }
-                nBytes--;
+            if ((chr >> 5) == 0b110)        cnt = 1;
+            else if ((chr >> 4) == 0b1110)  cnt = 2;
+            else if ((chr >> 3) == 0b11110) cnt = 3;
+            else if ((chr >> 7) != 0)       return false;
+            else {
+                if ((chr >> 6) != 0b10)     return false;
+                cnt--;
             }
-        }
-        else
-        {
-            if ((chr & 0xC0) != 0x80) {
-                return false;
-            }
-            nBytes--;
         }
     }
 
-    if (nBytes > 0)
-        return false;
-
-    if (bAllAscii)
-        return false;
-
-    return true;
+    return !isASCII && cnt == 0;
 }
