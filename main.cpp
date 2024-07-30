@@ -8,7 +8,6 @@
 
 #include "codec.h"
 
-
 // the encoding stuff to be implemented in FA2sp.
 // just test in linux.
 //   edit: windows would only rely on WINAPI.
@@ -17,7 +16,7 @@
 int main(int argc, const char* argv[]) {
     using namespace std;
     ifstream fin;
-    fin.open("./eg_u8.map", ios::in);
+    fin.open("./eg_gbk.map", ios::in);
     if (fin.bad())
         return 1;
 

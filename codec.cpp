@@ -3,7 +3,11 @@
 
 // see "C++ gbk utf8 converting": https://gist.github.com/mgttt/d0aba83da88552f95edafb65124d41c3
 // and windows ver with this ref: https://www.sindsun.com/articles/16/136
+
 // the IsTextUTF8 refs this: https://www.codersrc.com/archives/14823.html
+// and this  https://www.tutorialspoint.com/utf-8-validation-in-cplusplus.
+// however both contains issue.
+
 // all slightly changed.
 
 #ifndef _WIN32
@@ -65,37 +69,44 @@ std::string gb_utf_conv(std::string& in, int fromCodePage, int toCodePage)
 }
 #endif
 
-bool IsTextUTF8(const std::string& str)
+bool IsTextUTF8(const std::string& str)  // so Tn=O(n^2).
 {
-    // a better version, see https://www.tutorialspoint.com/utf-8-validation-in-cplusplus.
+    // https://blog.csdn.net/qq_36583051/article/details/118341309
     if (str.empty())
         return false;
 
-    int cnt = 0;
-    // Since FA2sp is Windows Native with GBK default code page,
-    // I'd consider to shorten the validating process, and avoid extra (utf8)ASCII -> (gbk)ASCII stuff.
     bool isASCII = true;
 
-    for (int i = 0; i < str.length(); i++)
-    {
-        int chr = str[i];
-
-        if ((chr & 0x80) == 0)
-            continue;
-        isASCII = false;
-
-        if (!cnt)
+    auto pre = [](unsigned char byte) -> int
         {
-            if ((chr >> 5) == 0b110)        cnt = 1;
-            else if ((chr >> 4) == 0b1110)  cnt = 2;
-            else if ((chr >> 3) == 0b11110) cnt = 3;
-            else if ((chr >> 7) != 0)       return false;
-            else {
-                if ((chr >> 6) != 0b10)     return false;
-                cnt--;
+            unsigned char mask = 0x80;
+            int num = 0;
+            for (int i = 0; i < 8; i++) {   // O(n) per bit
+                if ((byte & mask) == mask) {
+                    mask = mask >> 1;
+                    num++;
+                }
+                else break;
+            }
+            return num;
+        };
+
+    for (int num = 0, i = 0; i < str.length(); )  // O(n) per byte
+    {
+        if ((str[i] & 0x80) == 0) {
+            i++;
+            continue;
+        }
+        isASCII = false;
+        if ((num = pre(str[i])) > 2) {
+            i++;
+            for (int j = 0; j < num - 1; j++) {
+                if ((str[i] & 0xc0) != 0x80)
+                    return false;
+                i++;
             }
         }
+        else return false;
     }
-
-    return !isASCII && cnt == 0;
+    return !isASCII;    
 }
